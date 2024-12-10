@@ -1,0 +1,18 @@
+# Exclude IDE settings
+.idea/
+
+# Exclude Python virtual environments
+venv/
+
+# Exclude compiled Python files
+__pycache__/
+*.pyc
+*.pyo
+
+# Exclude temporary files
+*.swp
+*.swo
+.DS_Store
+
+# Exclude logs and temporary output
+*.log
