@@ -1,7 +1,7 @@
 from app.db import get_db_connection
 
 
-def fetch_museums_by_city(city):
+def fetch_museums_by_city():
     query = """
         SELECT 
             *, 
@@ -15,7 +15,7 @@ def fetch_museums_by_city(city):
     """
     connection = get_db_connection()
     cursor = connection.cursor()
-    cursor.execute(query, (city,))
+    cursor.execute(query)  # No parameter substitution needed
     rows = cursor.fetchall()
     connection.close()
 
