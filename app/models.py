@@ -1,27 +1,40 @@
 from app.db import get_db_connection
 
-
-def fetch_museums_by_city():
+def fetch_pois_within_buffer(longitude, latitude, buffer_distance):
+    """
+    Fetch points of interest (amenities) within a buffer around a given coordinate.
+    """
     query = """
         SELECT 
             *, 
             ST_AsGeoJSON(way) AS geometry, 
             CONCAT(tags->'addr:street', ' ', tags->'addr:housenumber') AS address
         FROM 
-            planet_osm_polygon
+            public.planet_osm_point p
         WHERE 
-            tags->'addr:city' = 'Münster'
-            AND tourism = 'museum';
+            ST_Contains(
+                ST_Transform(
+                    ST_Buffer(
+                        ST_Transform(
+                            ST_SetSRID(ST_MakePoint(%s, %s), 4326), 
+                            25832
+                        ), 
+                        %s
+                    ),
+                    4326
+                ), 
+                p.way
+            )
+            AND tags->'amenity' = 'cafe'
     """
     connection = get_db_connection()
     cursor = connection.cursor()
-    cursor.execute(query)  # No parameter substitution needed
+    cursor.execute(query, (longitude, latitude, buffer_distance))
     rows = cursor.fetchall()
     connection.close()
 
-    # Assuming the columns you want are known, define column names here:
+    # Process and return results as a list of dictionaries
     column_names = [desc[0] for desc in cursor.description]
-
     results = []
     for row in rows:
         row_data = {column_names[i]: row[i] for i in range(len(row))}
