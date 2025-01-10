@@ -1,10 +1,6 @@
 "amenity","tourism"
-"arts_centre","artwork"
 "bar","attraction"
-"biergarten","gallery"
-"cafe","museum"
-"fast_food","viewpoint"
+"cafe","gallery"
+"fast_food","museum"
 "ice_cream","zoo"
-"pub"
-"restaurant"
-"theatre
+"restaurant",

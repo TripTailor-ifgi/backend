@@ -14,14 +14,15 @@ def fetch_pois():
         buffer_distance = data.get('buffer_distance')
         filters = data.get('filters')
 
-        # Process filters into a format suitable for the database query
         try:
+            # Call the unified fetch_pois_flexible function
             results = fetch_pois_flexible(longitude, latitude, buffer_distance, filters)
             return jsonify(results)
         except Exception as e:
             return jsonify({"error": str(e)}), 500
     else:
         return jsonify({"error": "Method Not Allowed"}), 405
+
 
 @api_blueprint.route("/api/categories", methods=["GET"])
 def get_categories():

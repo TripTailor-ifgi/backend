@@ -23,16 +23,16 @@ def get_option_mapping():
 
 
 def fetch_pois_flexible(longitude, latitude, buffer_distance, filters):
-    """
-    Fetch points of interest dynamically based on filters.
-    """
     try:
-        # Base SQL query
+        # Base SQL query with common fields
         base_query = """
-            SELECT 
-                *, 
+            SELECT DISTINCT
+                name, 
                 ST_AsGeoJSON(way) AS geometry, 
-                CONCAT(tags->'addr:street', ' ', tags->'addr:housenumber') AS address
+                CONCAT(tags->'addr:street', ' ', tags->'addr:housenumber') AS address,
+                ST_Transform(ST_SetSRID(ST_MakePoint(%s, %s), 4326), 25832) <-> ST_Transform(p.way, 25832) AS distance,
+                tags -> 'opening_hours' AS opening_hours,
+                tags -> 'wheelchair' AS wheelchair
             FROM 
                 public.planet_osm_point p
             WHERE
@@ -49,36 +49,62 @@ def fetch_pois_flexible(longitude, latitude, buffer_distance, filters):
                     ), 
                     p.way
                 )
-                AND tags ? 'addr:street'
         """
 
         filter_conditions = []
-        filter_values = [longitude, latitude, buffer_distance]
+        filter_values = [longitude, latitude, longitude, latitude, buffer_distance]
 
         # Process each filter
         for filter_entry in filters:
             option = filter_entry.get('option')
             vegan = filter_entry.get('vegan', False)
 
-            if option == "cafe" or option == "restaurant" or option == "fast_food":
+            if option in ["bar", "pub"]:
+                # Special case for bar: include pub
+                filter_conditions.append("""
+                    (amenity IN ('bar', 'pub') AND 
+                    tags ? 'opening_hours' AND 
+                    tags ? 'wheelchair' AND 
+                    tags ? 'addr:street')
+                """)
+            elif option in ["artwork", "attraction", "gallery", "museum", "zoo"]:
+                # Tourism-specific logic
+                if option == "artwork":
+                    filter_conditions.append("(tourism = 'artwork' AND name IS NOT NULL)")
+                elif option == "attraction":
+                    filter_conditions.append("(tourism = 'attraction' AND name IS NOT NULL)")
+                elif option in ["gallery", "museum"]:
+                    filter_conditions.append("(tourism = %s AND tags ? 'opening_hours')")
+                    filter_values.append(option)
+                elif option == "zoo":
+                    filter_conditions.append("(tourism = 'zoo')")
+            else:
+                # General amenity logic
                 if vegan:
-                    # Add vegan-specific filtering
+                    # Vegan-specific filtering
                     filter_conditions.append("""
                         (amenity = %s AND 
-                         (tags->'diet:vegan' = 'yes' OR tags->'diet:vegan' = 'only'))
+                         (tags->'diet:vegan' = 'yes' OR tags->'diet:vegan' = 'only') AND 
+                         tags ? 'opening_hours' AND 
+                         tags ? 'wheelchair' AND 
+                         tags ? 'addr:street')
                     """)
                 else:
-                    # Add non-vegan general filter
-                    filter_conditions.append("amenity = %s")
-            else:
-                # General filtering for other options
-                filter_conditions.append("amenity = %s")
-
-            filter_values.append(option)
+                    # Non-vegan filtering
+                    filter_conditions.append("""
+                        (amenity = %s AND 
+                         tags ? 'opening_hours' AND 
+                         tags ? 'wheelchair' AND 
+                         tags ? 'addr:street')
+                    """)
+                filter_values.append(option)
 
         # Combine all conditions
         if filter_conditions:
             base_query += " AND (" + " OR ".join(filter_conditions) + ")"
+
+        # Add ORDER BY clause to sort by distance
+        base_query += " ORDER BY distance ASC"
 
         # Debugging: Log the query and values
         print("Generated SQL Query:", base_query)
