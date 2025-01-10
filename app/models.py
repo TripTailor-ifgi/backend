@@ -35,7 +35,7 @@ def fetch_pois_flexible(longitude, latitude, buffer_distance, filters):
                 CONCAT(tags->'addr:street', ' ', tags->'addr:housenumber') AS address
             FROM 
                 public.planet_osm_point p
-            WHERE 
+            WHERE
                 ST_Contains(
                     ST_Transform(
                         ST_Buffer(
@@ -60,15 +60,26 @@ def fetch_pois_flexible(longitude, latitude, buffer_distance, filters):
             option = filter_entry.get('option')
             vegan = filter_entry.get('vegan', False)
 
-            if vegan:
-                # Add vegan-specific filter
-                filter_conditions.append("""
-                    (tags->'amenity' = %s AND 
-                     (tags->'diet:vegan' = 'yes' OR tags->'diet:vegan' = 'only'))
-                """)
+            if option == "amenity":
+                # Add special filtering for amenity
+                if vegan:
+                    # Vegan filter for amenity
+                    filter_conditions.append("""
+                        (amenity = %s AND 
+                         (tags->'diet:vegan' = 'yes' OR tags->'diet:vegan' = 'only') AND 
+                         tags ? 'opening_hours' AND 
+                         tags ? 'wheelchair')
+                    """)
+                else:
+                    # Non-vegan amenity filter
+                    filter_conditions.append("""
+                        (amenity = %s AND 
+                         tags ? 'opening_hours' AND 
+                         tags ? 'wheelchair')
+                    """)
             else:
-                # Add general filter
-                filter_conditions.append("tags->'amenity' = %s")
+                # General filtering for non-amenity options
+                filter_conditions.append("amenity = %s")
 
             filter_values.append(option)
 
