@@ -9,8 +9,6 @@ def get_option_mapping():
         file_path = "app/data/categories_options_point.csv"  # Update this path as needed
         data = load_csv(file_path)  # Assuming this loads the CSV into a list of dictionaries
 
-        print("Loaded CSV data:", data)  # Debugging: Check the loaded data
-
         # Create a dictionary mapping each option to its respective column
         mapping = {}
         for row in data:
@@ -18,7 +16,6 @@ def get_option_mapping():
                 if value:  # Skip empty cells
                     mapping[value] = column
 
-        print("Option to column mapping:", mapping)  # Debugging: Verify the mapping
         return mapping
     except Exception as e:
         print("Error in get_option_mapping:", str(e))  # Log the specific error
@@ -30,8 +27,6 @@ def fetch_pois_flexible(longitude, latitude, buffer_distance, filters):
     Fetch points of interest dynamically based on filters.
     """
     try:
-        print("Starting POI fetch with params:", longitude, latitude, buffer_distance, filters)
-
         # Base SQL query
         base_query = """
             SELECT 
@@ -54,29 +49,32 @@ def fetch_pois_flexible(longitude, latitude, buffer_distance, filters):
                     ), 
                     p.way
                 )
+                AND tags ? 'addr:street'
         """
 
         filter_conditions = []
         filter_values = [longitude, latitude, buffer_distance]
 
-        # Load the mapping
-        option_mapping = get_option_mapping()
-        print("Option mapping:", option_mapping)
+        # Process each filter
+        for filter_entry in filters:
+            option = filter_entry.get('option')
+            vegan = filter_entry.get('vegan', False)
 
-        # Build filter conditions
-        for filter_value in filters:
-            column = option_mapping.get(filter_value)
-            if column:
-                filter_conditions.append(f"{column} = %s")
-                filter_values.append(filter_value)
+            if vegan:
+                # Add vegan-specific filter
+                filter_conditions.append("""
+                    (tags->'amenity' = %s AND 
+                     (tags->'diet:vegan' = 'yes' OR tags->'diet:vegan' = 'only'))
+                """)
             else:
-                print(f"Warning: No mapping found for filter: {filter_value}")
+                # Add general filter
+                filter_conditions.append("tags->'amenity' = %s")
 
+            filter_values.append(option)
+
+        # Combine all conditions
         if filter_conditions:
             base_query += " AND (" + " OR ".join(filter_conditions) + ")"
-
-        print("Generated query:", base_query)
-        print("With values:", filter_values)
 
         # Execute query
         connection = get_db_connection()
@@ -89,7 +87,6 @@ def fetch_pois_flexible(longitude, latitude, buffer_distance, filters):
         column_names = [desc[0] for desc in cursor.description]
         results = [{column_names[i]: row[i] for i in range(len(row))} for row in rows]
 
-        print("Query results:", results)
         return results
     except Exception as e:
         print("Error in fetch_pois_flexible:", str(e))
