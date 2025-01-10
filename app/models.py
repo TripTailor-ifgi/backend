@@ -60,25 +60,18 @@ def fetch_pois_flexible(longitude, latitude, buffer_distance, filters):
             option = filter_entry.get('option')
             vegan = filter_entry.get('vegan', False)
 
-            if option == "amenity":
-                # Add special filtering for amenity
+            if option == "cafe" or option == "restaurant" or option == "fast_food":
                 if vegan:
-                    # Vegan filter for amenity
+                    # Add vegan-specific filtering
                     filter_conditions.append("""
                         (amenity = %s AND 
-                         (tags->'diet:vegan' = 'yes' OR tags->'diet:vegan' = 'only') AND 
-                         tags ? 'opening_hours' AND 
-                         tags ? 'wheelchair')
+                         (tags->'diet:vegan' = 'yes' OR tags->'diet:vegan' = 'only'))
                     """)
                 else:
-                    # Non-vegan amenity filter
-                    filter_conditions.append("""
-                        (amenity = %s AND 
-                         tags ? 'opening_hours' AND 
-                         tags ? 'wheelchair')
-                    """)
+                    # Add non-vegan general filter
+                    filter_conditions.append("amenity = %s")
             else:
-                # General filtering for non-amenity options
+                # General filtering for other options
                 filter_conditions.append("amenity = %s")
 
             filter_values.append(option)
@@ -86,6 +79,10 @@ def fetch_pois_flexible(longitude, latitude, buffer_distance, filters):
         # Combine all conditions
         if filter_conditions:
             base_query += " AND (" + " OR ".join(filter_conditions) + ")"
+
+        # Debugging: Log the query and values
+        print("Generated SQL Query:", base_query)
+        print("With values:", filter_values)
 
         # Execute query
         connection = get_db_connection()
