@@ -4,34 +4,37 @@ from app.utils import get_categories_and_options
 
 api_blueprint = Blueprint("api", __name__)
 
-@api_blueprint.route('/api/pois', methods=['GET', 'POST'])
+
+@api_blueprint.route('/api/pois', methods=['POST'])
 def fetch_pois():
     if request.method == 'POST':
-        # Handle POST request
-        data = request.get_json()  # Parse JSON payload
-        longitude = data.get('longitude')
-        latitude = data.get('latitude')
-        buffer_distance = data.get('buffer_distance')
-        filters = data.get('filters')
+        data = request.get_json()
+
+        # Extract necessary fields from the request JSON
+        start_location = data["options"]["startLocation"]["coords"]
+        buffer_distance = int(data["options"]["range"]) * 1000  # Convert km to meters
+        locations = data["locations"]
+        filters = {
+            "barrierFree": data["options"].get("barrierFree", False),
+            "vegan": data["options"].get("vegan", False),
+        }
+        date = data["options"]["date"]
 
         try:
-            # Call the unified fetch_pois_flexible function
-            results = fetch_pois_flexible(longitude, latitude, buffer_distance, filters)
-            return jsonify(results)
+            # Call function with extracted values
+            all_results, closest_results = fetch_pois_flexible(
+                start_location['lon'],
+                start_location['lat'],
+                buffer_distance,
+                locations,
+                filters,
+                date
+            )
+
+            return jsonify({
+                "all_results": all_results,
+                "closest_results": closest_results
+            })
+
         except Exception as e:
             return jsonify({"error": str(e)}), 500
-    else:
-        return jsonify({"error": "Method Not Allowed"}), 405
-
-
-@api_blueprint.route("/api/categories", methods=["GET"])
-def get_categories():
-    """
-    API endpoint to fetch categories and their options from the CSV file.
-    """
-    try:
-        # Load categories and options
-        categories = get_categories_and_options()
-        return jsonify(categories)  # Send as JSON response
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
