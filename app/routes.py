@@ -1,6 +1,5 @@
 from flask import Blueprint, request, jsonify
 from app.models import fetch_pois_flexible
-from app.utils import get_categories_and_options
 
 api_blueprint = Blueprint("api", __name__)
 

@@ -20,7 +20,7 @@ def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locati
             if location_type == "start":
                 continue
 
-            if location_subtype.lower() == "museum":
+            if location_subtype.lower() in {"museum", "park"}:
                 table = "public.planet_osm_polygon"
                 geometry_field = "ST_AsGeoJSON(ST_Centroid(way)) AS geometry"
             else:
@@ -31,8 +31,8 @@ def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locati
 
             query_all = f"""
                 SELECT DISTINCT
-                    name, 
-                    {geometry_field}, 
+                    name,
+                    {geometry_field},
                     CONCAT(tags->'addr:street', ' ', tags->'addr:housenumber') AS address,
                     ST_Transform(ST_SetSRID(ST_MakePoint(%s, %s), 4326), 25832) <-> ST_Transform(p.way, 25832) AS distance,
                     tags->'opening_hours' AS opening_hours,
@@ -100,15 +100,22 @@ def build_filter_query(location_type, location_subtype, filters):
         filter_conditions.append("amenity = %s AND tags ? 'addr:street'")
         filter_values.append(location_subtype.lower())
 
+        if filters.get('barrierFree'):
+            filter_conditions.append("tags->'wheelchair' = 'yes'")
+
         if filters.get('vegan') and location_subtype.lower() not in ['bar', 'pub']:
             filter_conditions.append("(tags->'diet:vegan' = 'yes' OR tags->'diet:vegan' = 'only')")
+
+    elif location_subtype.lower() == "park":
+        filter_conditions.append("leisure = %s AND name IS NOT NULL")
+        filter_values.append(location_subtype.lower())
 
     elif location_type == "tourism":
         filter_conditions.append("tourism = %s")
         filter_values.append(location_subtype.lower())
 
-    if filters.get('barrierFree'):
-        filter_conditions.append("tags->'wheelchair' = 'yes'")
+        if filters.get('barrierFree'):
+            filter_conditions.append("tags->'wheelchair' = 'yes'")
 
     filter_query = " AND ".join(filter_conditions)
     return f" AND ({filter_query})", filter_values, detailed_type
