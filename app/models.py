@@ -41,7 +41,7 @@ def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locati
                     ) AS distance,
                     tags->'opening_hours' AS opening_hours,
                     tags->'wheelchair' AS wheelchair,
-                    tags->'vegan' AS vegan
+                    tags->'diet:vegan' AS vegan
                 FROM 
                     {table} p
                 WHERE

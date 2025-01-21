@@ -1,8 +1,10 @@
 import json
 from flask import Blueprint, request, jsonify
 from app.models import fetch_pois_flexible
+from flask_cors import CORS
 
 api_blueprint = Blueprint("api", __name__)
+CORS(api_blueprint)
 
 @api_blueprint.route('/api/pois', methods=['POST'])
 def fetch_pois():
