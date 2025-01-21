@@ -1,6 +1,6 @@
 import json
-import datetime
 from app.db import get_db_connection
+
 
 def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locations, filters, date):
     try:
@@ -13,60 +13,55 @@ def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locati
         connection = get_db_connection()
         cursor = connection.cursor()
 
-        for index, location in enumerate(locations):
-            location_type = location.get('top').lower()
-            location_subtype = location.get('sub').lower()
+        for location in locations:
+            location_type = location.get('top', '').lower()
+            location_subtype = location.get('sub', '').lower()
 
             if location_type == "start":
                 continue
 
-            if location_subtype.lower() in {"museum", "park"}:
+            if location_subtype in {"museum", "park"}:
                 table = "public.planet_osm_polygon"
                 geometry_field = "ST_AsGeoJSON(ST_Centroid(way)) AS geometry"
             else:
                 table = "public.planet_osm_point"
                 geometry_field = "ST_AsGeoJSON(way) AS geometry"
 
-            filter_condition, filter_values, detailed_type = build_filter_query(location_type, location_subtype, filters)
+            filter_condition, filter_values, detailed_type = build_filter_query(location_type, location_subtype,
+                                                                                filters)
 
             query_all = f"""
                 SELECT DISTINCT
                     name,
                     {geometry_field},
                     CONCAT(tags->'addr:street', ' ', tags->'addr:housenumber') AS address,
-                    ST_Transform(ST_SetSRID(ST_MakePoint(%s, %s), 4326), 25832) <-> ST_Transform(p.way, 25832) AS distance,
+                    ST_Distance(
+                        ST_Transform(ST_SetSRID(ST_MakePoint(%s, %s), 4326), 25832), 
+                        ST_Transform(p.way, 25832)
+                    ) AS distance,
                     tags->'opening_hours' AS opening_hours,
-                    tags->'wheelchair' AS wheelchair
+                    tags->'wheelchair' AS wheelchair,
+                    tags->'vegan' AS vegan
                 FROM 
                     {table} p
                 WHERE
-                    ST_Contains(
-                        ST_Transform(
-                            ST_Buffer(
-                                ST_Transform(
-                                    ST_SetSRID(ST_MakePoint(%s, %s), 4326), 
-                                    25832
-                                ), 
-                                %s
-                            ),
-                            4326
-                        ), 
-                        p.way
+                    ST_DWithin(
+                        ST_Transform(ST_SetSRID(ST_MakePoint(%s, %s), 4326), 25832), 
+                        ST_Transform(p.way, 25832), 
+                        %s
                     )
                     {filter_condition}
                 ORDER BY distance ASC
             """
 
-            query_values = [current_longitude, current_latitude, current_longitude, current_latitude, buffer_distance] + filter_values
+            query_values = [current_longitude, current_latitude, current_longitude, current_latitude,
+                            buffer_distance] + filter_values
 
             cursor.execute(query_all, tuple(query_values))
             rows = cursor.fetchall()
 
             column_names = [desc[0] for desc in cursor.description]
-            location_results = []
-            for row in rows:
-                row_dict = {column_names[i]: row[i] for i in range(len(row))}
-                location_results.append(row_dict)
+            location_results = [{column_names[i]: row[i] for i in range(len(row))} for row in rows]
 
             if location_results:
                 all_results.append({
@@ -74,13 +69,12 @@ def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locati
                     "results": location_results
                 })
 
-                closest_result = location_results[0]
                 closest_results.append({
                     "location_type": detailed_type,
-                    "results": [closest_result]
+                    "results": [location_results[0]]
                 })
 
-                first_result = closest_result['geometry']
+                first_result = location_results[0]['geometry']
                 coords = parse_geojson_coords(first_result)
                 current_longitude, current_latitude = coords['lon'], coords['lat']
 
@@ -91,19 +85,24 @@ def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locati
         print("Error fetching POIs:", str(e))
         return [], []
 
+
 def build_filter_query(location_type, location_subtype, filters):
     filter_conditions = []
     filter_values = []
     detailed_type = f"{location_type}_{location_subtype.lower()}"
 
-    if location_type == "amenities":
-        filter_conditions.append("amenity = %s AND tags ? 'addr:street'")
-        filter_values.append(location_subtype.lower())
+    if location_type == "amenity":
+        if location_subtype.lower() == "bar":
+            filter_conditions.append("amenity in (%s, 'pub') AND tags ? 'addr:street'")
+            filter_values.append(location_subtype.lower())
+        else:
+            filter_conditions.append("amenity = %s AND tags ? 'addr:street'")
+            filter_values.append(location_subtype.lower())
 
-        if filters.get('barrierFree'):
+        if filters.get('BarrierFree'):
             filter_conditions.append("tags->'wheelchair' = 'yes'")
 
-        if filters.get('vegan') and location_subtype.lower() not in ['bar', 'pub']:
+        if filters.get('Vegan') and location_subtype.lower() not in ['bar', 'pub']:
             filter_conditions.append("(tags->'diet:vegan' = 'yes' OR tags->'diet:vegan' = 'only')")
 
     elif location_subtype.lower() == "park":
@@ -114,11 +113,12 @@ def build_filter_query(location_type, location_subtype, filters):
         filter_conditions.append("tourism = %s")
         filter_values.append(location_subtype.lower())
 
-        if filters.get('barrierFree'):
+        if filters.get('BarrierFree'):
             filter_conditions.append("tags->'wheelchair' = 'yes'")
 
     filter_query = " AND ".join(filter_conditions)
     return f" AND ({filter_query})", filter_values, detailed_type
+
 
 def parse_geojson_coords(geojson):
     geo_data = json.loads(geojson)
