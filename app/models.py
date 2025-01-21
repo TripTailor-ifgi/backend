@@ -1,11 +1,11 @@
 import json
 from app.db import get_db_connection
 
-
 def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locations, filters, date):
     try:
         all_results = []
         closest_results = []
+        visited_locations = set()  # Track visited locations by name
 
         current_longitude = start_longitude
         current_latitude = start_latitude
@@ -27,18 +27,20 @@ def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locati
                 table = "public.planet_osm_point"
                 geometry_field = "ST_AsGeoJSON(way) AS geometry"
 
-            filter_condition, filter_values, detailed_type = build_filter_query(location_type, location_subtype,
-                                                                                filters)
+            filter_condition, filter_values, detailed_type = build_filter_query(location_type, location_subtype, filters)
+
+            # Exclude previously visited locations
+            exclusion_clause = ""
+            if visited_locations:
+                exclusion_clause = "AND name NOT IN (%s)" % ', '.join(['%s'] * len(visited_locations))
+                filter_values.extend(visited_locations)
 
             query_all = f"""
                 SELECT DISTINCT
                     name,
                     {geometry_field},
                     CONCAT(tags->'addr:street', ' ', tags->'addr:housenumber') AS address,
-                    ST_Distance(
-                        ST_Transform(ST_SetSRID(ST_MakePoint(%s, %s), 4326), 25832), 
-                        ST_Transform(p.way, 25832)
-                    ) AS distance,
+                    ST_Transform(ST_SetSRID(ST_MakePoint(%s, %s), 4326),25832) <-> ST_Transform(p.way,25832) AS distance,
                     tags->'opening_hours' AS opening_hours,
                     tags->'wheelchair' AS wheelchair,
                     tags->'diet:vegan' AS vegan
@@ -51,11 +53,11 @@ def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locati
                         %s
                     )
                     {filter_condition}
+                    {exclusion_clause}
                 ORDER BY distance ASC
             """
 
-            query_values = [current_longitude, current_latitude, current_longitude, current_latitude,
-                            buffer_distance] + filter_values
+            query_values = [current_longitude, current_latitude, current_longitude, current_latitude, buffer_distance] + filter_values
 
             cursor.execute(query_all, tuple(query_values))
             rows = cursor.fetchall()
@@ -64,6 +66,7 @@ def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locati
             location_results = [{column_names[i]: row[i] for i in range(len(row))} for row in rows]
 
             if location_results:
+                # Add to results list
                 all_results.append({
                     "location_type": detailed_type,
                     "results": location_results
@@ -74,6 +77,10 @@ def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locati
                     "results": [location_results[0]]
                 })
 
+                # Store visited location name to avoid selecting it again
+                visited_locations.add(location_results[0]['name'])
+
+                # Update current location for the next search
                 first_result = location_results[0]['geometry']
                 coords = parse_geojson_coords(first_result)
                 current_longitude, current_latitude = coords['lon'], coords['lat']
@@ -84,7 +91,6 @@ def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locati
     except Exception as e:
         print("Error fetching POIs:", str(e))
         return [], []
-
 
 def build_filter_query(location_type, location_subtype, filters):
     filter_conditions = []
@@ -118,7 +124,6 @@ def build_filter_query(location_type, location_subtype, filters):
 
     filter_query = " AND ".join(filter_conditions)
     return f" AND ({filter_query})", filter_values, detailed_type
-
 
 def parse_geojson_coords(geojson):
     geo_data = json.loads(geojson)
