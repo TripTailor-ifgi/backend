@@ -61,24 +61,7 @@ cd backend
 Install all required Python packages using `pip`:
 
 ```bash
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 ---
-
-## Step 4: Configure Database Credentials
-
-1. Open the `config.py` file in the `app` folder.
-
-2. Update the database credentials in the `Config` class:
-
-   ```python
-   class Config:
-       DB_HOST = "your-database-host"
-       DB_NAME = "your-database-name"
-       DB_USER = "your-database-username"
-       DB_PASSWORD = "your-database-password"
-       DB_PORT = 5432  # Default PostgreSQL port
-   ```
-
-3. Ensure your PostgreSQL database has the required table (`planet_osm_polygon`) with the relevant data.
