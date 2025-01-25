@@ -14,6 +14,13 @@ Before you begin, ensure you have the following installed on your machine:
 - PostgreSQL with PostGIS extension
 - pip (Python package manager)
 - virtualenv
+-  Docker DB (use the [link](https://drive.google.com/file/d/1nGDtBZTlKwpituH9trawr0QZXLh7HdMI/view) to download it)
+
+Run in the terminal to set up DB (make sure to be in the correct folder):
+```bash
+docker compose build
+docker compose up
+```
 
 ---
 
