@@ -1,5 +1,102 @@
 import json
 from app.db import get_db_connection
+import logging
+
+def check_possible_options(start_longitude, start_latitude, buffer_distance, filters):
+    try:
+        possible_options = []
+        options_amenities = ['bar', 'pub', 'cafe', 'fast_food', 'ice_cream', 'restaurant']
+        options_tourism = ['attraction', 'gallery', 'museum', 'zoo', 'park']
+
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        # Helper function to build filter conditions
+        def build_filter_query(location_type, location_subtype):
+            filter_conditions = []
+            filter_values = []
+
+            if location_type == "amenity":
+                if location_subtype == "bar":
+                    filter_conditions.append("amenity IN (%s, 'pub') AND tags ? 'addr:street'")
+                    filter_values.append(location_subtype)
+                else:
+                    filter_conditions.append("amenity = %s AND tags ? 'addr:street'")
+                    filter_values.append(location_subtype)
+
+                if filters.get('BarrierFree'):
+                    filter_conditions.append("tags->'wheelchair' = 'yes'")
+
+                if filters.get('Vegan') and location_subtype not in ['bar', 'pub']:
+                    filter_conditions.append("(tags->'diet:vegan' = 'yes' OR tags->'diet:vegan' = 'only')")
+
+            elif location_subtype == "park":
+                filter_conditions.append("leisure = %s AND name IS NOT NULL")
+                filter_values.append(location_subtype)
+
+            elif location_type == "tourism":
+                filter_conditions.append("tourism = %s")
+                filter_values.append(location_subtype)
+
+                if filters.get('BarrierFree'):
+                    filter_conditions.append("tags->'wheelchair' = 'yes'")
+
+            filter_query = " AND ".join(filter_conditions)
+            return f" AND ({filter_query})", filter_values
+
+        # Helper function to build query for each option
+        def build_query(option, location_type):
+            if option in ['park', 'museum']:
+                table = "planet_osm_polygon"
+                geometry_field = "ST_Centroid(way)"
+            else:
+                table = "planet_osm_point"
+                geometry_field = "way"
+
+            filter_condition, filter_values = build_filter_query(location_type, option)
+
+            query = f"""
+                SELECT name
+                FROM {table} p
+                WHERE ST_DWithin(
+                        ST_Transform(ST_SetSRID(ST_MakePoint(%s, %s), 4326), 25832),
+                        ST_Transform({geometry_field}, 25832),
+                        %s
+                    )
+                    {filter_condition}
+                LIMIT 1
+            """
+            return query, [start_longitude, start_latitude, buffer_distance] + filter_values
+
+        # Check amenities
+        bar_found = False
+        for amenity in options_amenities:
+            if amenity == 'pub' and bar_found:
+                continue  # Skip checking for pub if bar is found
+
+            query, query_values = build_query(amenity, 'amenity')
+            cursor.execute(query, query_values)
+            result = cursor.fetchone()
+            if result:
+                if amenity == 'bar':
+                    bar_found = True
+                possible_options.append({"amenity": amenity})
+
+        # Check tourism spots
+        for tourism in options_tourism:
+            query, query_values = build_query(tourism, 'tourism')
+            cursor.execute(query, query_values)
+            result = cursor.fetchone()
+            if result:
+                possible_options.append({"tourism": tourism})
+
+        connection.close()
+        return possible_options
+
+    except Exception as e:
+        logging.error(f"Error in check_possible_options: {e}")
+        return []
+
 
 def fetch_pois_flexible(start_longitude, start_latitude, buffer_distance, locations, filters, date):
     try:

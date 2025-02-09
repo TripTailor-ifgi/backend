@@ -2,6 +2,7 @@ import json
 import logging
 from flask import Blueprint, request, jsonify
 from app.models import fetch_pois_flexible
+from app.models import check_possible_options
 from flask_cors import CORS
 
 # Setup logging
@@ -10,15 +11,61 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 api_blueprint = Blueprint("api", __name__)
 CORS(api_blueprint)
 
+@api_blueprint.route('/api/check', methods=['POST'])
+def fetch_check():
+    try:
+        logging.info("Received a request at /api/check")
+        data = request.get_json()
+        if not data:
+            logging.error("No JSON data provided.")
+            return jsonify({"error": "No JSON data provided."}), 400
+
+        logging.debug(f"Parsed JSON data: {json.dumps(data, indent=2)}")
+
+        options = data.get("options", {})
+        start_location = options.get("start_location", {}).get("coords", {})
+        lon = start_location.get('lon')
+        lat = start_location.get('lat')
+
+        if lon is None or lat is None:
+            logging.error("Missing coordinates in start_location.")
+            return jsonify({"error": "Missing coordinates in start_location."}), 400
+
+        try:
+            buffer_distance = int(options.get("range", 0)) * 1000  # Convert km to meters
+
+        except ValueError as ve:
+            logging.error(f"Invalid range value: {ve}")
+            return jsonify({"error": f"Invalid range value: {ve}"}), 400
+
+        barrier_free = options.get("barrierFree", False)
+        vegan = options.get("vegan", False)
+
+        filters = {
+            "BarrierFree": barrier_free,
+            "Vegan": vegan,
+        }
+
+        possible_options = check_possible_options(lon, lat, buffer_distance, filters)
+        if not possible_options:
+            logging.info("No possible options found within the buffer distance.")
+
+        return jsonify({"possible_options": possible_options})
+    except json.JSONDecodeError as e:
+        logging.error(f"JSON Decode Error: {str(e)}")
+        return jsonify({"error": f"Invalid JSON format: {str(e)}"}), 400
+    except KeyError as e:
+        logging.error(f"Missing key in request: {str(e)}")
+        return jsonify({"error": f"Missing key in request: {str(e)}"}), 400
+    except Exception as e:
+        logging.error(f"Unhandled exception: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
 @api_blueprint.route('/api/pois', methods=['POST'])
 def fetch_pois():
     try:
         logging.info("Received a request at /api/pois")
-
-        # Log the raw request data for debugging
-        raw_data = request.get_data(as_text=True)
-        logging.debug(f"Raw request data: {raw_data}")
-
         # Attempt to parse JSON
         data = request.get_json()
 
