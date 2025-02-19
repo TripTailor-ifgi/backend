@@ -1,8 +1,8 @@
-import psycopg2
+import psycopg
 from app.config import Config
 
 def get_db_connection():
-    connection = psycopg2.connect(
+    connection = psycopg.connect(
         host=Config.DB_HOST,
         database=Config.DB_NAME,
         user=Config.DB_USER,
