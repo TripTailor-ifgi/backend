@@ -2,19 +2,17 @@
 
 ## Project Overview
 
-This backend application is built using Flask and provides an API for fetching museum data for the city of Münster. It uses a PostgreSQL database with PostGIS for spatial data.
+This backend application is of the [TripTailor](https://github.com/TripTailor-ifgi/TripTailor) project.
 
 ---
 
 ## Prerequisites
 
-Before you begin, ensure you have the following installed on your machine:
+The following prerequisites are needed:
 
-- I am using python 3.11
+- Python 3.11
 - PostgreSQL with PostGIS extension
-- pip (Python package manager)
-- virtualenv
--  Docker DB (use the [link](https://drive.google.com/file/d/1nGDtBZTlKwpituH9trawr0QZXLh7HdMI/view) to download it)
+- Docker DB (use the [link](https://drive.google.com/file/d/1nGDtBZTlKwpituH9trawr0QZXLh7HdMI/view) to download it)
 
 Run in the terminal to set up DB (make sure to be in the correct folder):
 ```bash
