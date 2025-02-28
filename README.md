@@ -1,4 +1,4 @@
-# Backend Installation Guide
+# Backend (Trip Tailor)
 
 ## Project Overview
 
